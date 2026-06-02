@@ -46,20 +46,16 @@ uv pip install -r requirements.txt
 
 # --- Gemma model ---
 MODEL_DIR="$HOME/.cache/voice-notes"
-MODEL_FILE="$MODEL_DIR/gemma-4-e4b-it.gguf"
+MODEL_FILE="$MODEL_DIR/gemma-4-E4B-it-Q4_K_M.gguf"
 mkdir -p "$MODEL_DIR"
 
 if [ ! -f "$MODEL_FILE" ]; then
   info "Downloading Gemma 4 E4B GGUF (this may take a while)..."
   uv run huggingface-cli download \
-    google/gemma-4-e4b-it-GGUF \
-    gemma-4-e4b-it-Q4_K_M.gguf \
+    unsloth/gemma-4-E4B-it-GGUF \
+    --include "gemma-4-E4B-it-Q4_K_M.gguf" \
     --local-dir "$MODEL_DIR" \
     || warn "Model download failed — fetch manually and point LLM_MODEL_PATH at it."
-  # Normalize filename if needed
-  if [ -f "$MODEL_DIR/gemma-4-e4b-it-Q4_K_M.gguf" ] && [ ! -f "$MODEL_FILE" ]; then
-    mv "$MODEL_DIR/gemma-4-e4b-it-Q4_K_M.gguf" "$MODEL_FILE"
-  fi
 else
   info "Gemma model already present."
 fi
