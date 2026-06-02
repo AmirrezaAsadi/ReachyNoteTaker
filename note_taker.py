@@ -25,6 +25,7 @@ from rich.text import Text
 import llm_processor as llm
 import note_store
 import tts_reader
+from reachy_gestures import RobotState, get_gestures, init_gestures
 
 load_dotenv()
 
@@ -156,46 +157,73 @@ def render(state: SessionState, live_partial: str) -> Layout:
 
 # --- Pipeline -------------------------------------------------------------
 
+def _gesture(state: RobotState):
+    g = get_gestures()
+    if g:
+        g.set_state(state)
+
+
 def process_utterance(state: SessionState, raw_text: str, stt_finalize_session):
     cmd = llm.detect_voice_command(raw_text)
     if cmd:
         return handle_command(state, cmd, stt_finalize_session)
 
     state.status = "processing"
+    _gesture(RobotState.PROCESSING)
     cleaned = llm.clean_transcript(raw_text)
+
     state.status = "writing"
+    _gesture(RobotState.WRITING)
+    g = get_gestures()
+    if g:
+        g.sync_to_note_length(len(cleaned.split()))
     structured = llm.structure_note(cleaned)
+
     state.current_raw.append(raw_text)
     state.current_clean.append(structured)
     state.last_speech_at = time.time()
     state.status = "idle"
+    _gesture(RobotState.IDLE)
 
 
 def handle_command(state: SessionState, cmd: dict, finalize):
     name = cmd["command"]
     if name == "new_note":
         finalize(state, save=True)
+        _gesture(RobotState.CONFIRMING)
         tts_reader.confirm("Starting a new note.")
+        _gesture(RobotState.IDLE)
     elif name == "save_note":
         finalize(state, save=True)
+        _gesture(RobotState.CONFIRMING)
         tts_reader.confirm("Note saved.")
+        _gesture(RobotState.IDLE)
     elif name == "cancel":
         state.current_raw.clear()
         state.current_clean.clear()
         state.current_tags.clear()
+        _gesture(RobotState.CONFIRMING)
         tts_reader.confirm("Discarded.")
+        _gesture(RobotState.IDLE)
     elif name == "read_back":
+        _gesture(RobotState.READING_BACK)
         tts_reader.read_text(state.current_body or "There's nothing to read yet.")
+        _gesture(RobotState.IDLE)
     elif name == "summarize":
         if state.session_notes or state.current_clean:
             corpus = state.session_notes + ([state.current_body] if state.current_body else [])
+            _gesture(RobotState.SUMMARIZING)
             summary = llm.summarize_session(corpus)
             console.print(Panel(Markdown(summary), title="Session summary"))
+            _gesture(RobotState.READING_BACK)
             tts_reader.read_text(summary)
+            _gesture(RobotState.IDLE)
     elif name == "add_tag":
         if cmd.get("arg"):
             state.current_tags.append(cmd["arg"])
+            _gesture(RobotState.CONFIRMING)
             tts_reader.confirm(f"Tagged {cmd['arg']}.")
+            _gesture(RobotState.IDLE)
 
 
 def finalize_note(state: SessionState, *, save: bool) -> None:
@@ -222,9 +250,13 @@ def finalize_note(state: SessionState, *, save: bool) -> None:
 
 # --- Main loop ------------------------------------------------------------
 
-def main():
+def main(robot: bool = False):
     state = SessionState()
     audio_q: queue.Queue[np.ndarray] = queue.Queue(maxsize=64)
+
+    if robot:
+        console.print("[bold cyan]Initializing Reachy Mini...[/bold cyan]")
+        init_gestures()
 
     def on_audio(indata, frames, time_info, status):
         audio_q.put(indata[:, 0].copy())
@@ -260,7 +292,12 @@ def main():
 
                 if block is not None:
                     utterance = vad.feed(block)
-                    state.status = "listening" if vad._in_speech else state.status
+                    if vad._in_speech:
+                        state.status = "listening"
+                        g = get_gestures()
+                        if g:
+                            g.set_state(RobotState.LISTENING)
+                            g.sync_to_audio_energy(vad.energy)
                     if utterance is not None and len(utterance) > SAMPLE_RATE // 2:
                         state.status = "processing"
                         live.update(render(state, "transcribing…"))
@@ -289,18 +326,27 @@ def main():
     finalize_note(state, save=True)
     if state.session_notes:
         try:
+            _gesture(RobotState.SUMMARIZING)
             summary = llm.summarize_session(state.session_notes)
             day_dir = note_store._today_dir()
             (day_dir / "session-summary.md").write_text(summary + "\n")
             console.print(f"[green]wrote session-summary.md[/green]")
         except Exception as e:  # noqa: BLE001
             console.print(f"[red]summary failed:[/red] {e}")
+    g = get_gestures()
+    if g:
+        g.stop()
     console.print("[bold]Bye.[/bold]")
 
 
 if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="voice-notes-local")
+    parser.add_argument("--robot", action="store_true", help="Enable Reachy Mini gesture sync")
+    args = parser.parse_args()
     try:
-        main()
+        main(robot=args.robot)
     except KeyboardInterrupt:
         pass
     sys.exit(0)
