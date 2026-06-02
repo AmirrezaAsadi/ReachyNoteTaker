@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import subprocess
+import tempfile
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -21,13 +23,21 @@ def read_text(text: str) -> None:
         from mlx_audio.tts.generate import generate_audio
 
         ref_audio = VOICE_PRESET if Path(VOICE_PRESET).exists() else None
-        generate_audio(
-            text=text,
-            model=TTS_MODEL,
-            play=True,
-            verbose=False,
-            ref_audio=ref_audio,
-        )
+
+        with tempfile.TemporaryDirectory() as td:
+            generate_audio(
+                text=text,
+                model=TTS_MODEL,
+                play=False,
+                verbose=False,
+                save=True,
+                output_path=td,
+                file_prefix="tts_out",
+                ref_audio=ref_audio,
+            )
+            wav = next(Path(td).glob("*.wav"), None)
+            if wav:
+                subprocess.run(["afplay", str(wav)], check=False)
     except Exception as e:  # noqa: BLE001
         print(f"[tts] error: {e}")
 
