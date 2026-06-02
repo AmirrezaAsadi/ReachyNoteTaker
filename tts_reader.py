@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 TTS_ENABLED = os.getenv("TTS_ENABLED", "true").lower() == "true"
-VOICE_PRESET = os.path.expanduser(os.getenv("TTS_VOICE_PRESET", "~/.voice-notes-voice.qvp"))
+VOICE_PRESET = os.path.expanduser(os.getenv("TTS_VOICE_PRESET", "~/.voice-notes-voice.wav"))
 TTS_MODEL = "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16"
 
 

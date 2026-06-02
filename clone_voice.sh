@@ -20,21 +20,35 @@ import sys
 from pathlib import Path
 import soundfile as sf
 
-sample = Path(sys.argv[1])
+sample = Path(sys.argv[1]).resolve()
 data, sr = sf.read(str(sample))
 duration = len(data) / sr
-if duration < 5 or duration > 15:
-    print(f"Sample is {duration:.1f}s — must be 5–15s.", file=sys.stderr)
+if duration < 4:
+    print(f"Sample is {duration:.1f}s — ideally 5-15s for best quality (proceeding anyway).")
+elif duration > 15:
+    print(f"Sample is {duration:.1f}s — trim to under 15s for best results.", file=sys.stderr)
     sys.exit(2)
 
-out = Path.home() / ".voice-notes-voice.qvp"
-try:
-    from mlx_audio.tts import Qwen3TTS
-    tts = Qwen3TTS(model="Qwen/Qwen3-TTS-1.7B")
-    tts.clone_voice(str(sample), output_path=str(out))
-except Exception as e:
-    print(f"Voice cloning failed: {e}", file=sys.stderr)
-    sys.exit(3)
+# Test that voice cloning works with this file
+print(f"Testing voice clone with {sample.name} ({duration:.1f}s)...")
+from mlx_audio.tts.generate import generate_audio
+import tempfile, os
 
-print(f"Saved voice preset to {out}")
+with tempfile.TemporaryDirectory() as td:
+    generate_audio(
+        text="Hello, this is a voice test.",
+        model="mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16",
+        ref_audio=str(sample),
+        play=False,
+        verbose=False,
+        save=False,
+        output_path=td,
+    )
+
+# Save path as preset — generate_audio uses ref_audio at runtime
+out = Path.home() / ".voice-notes-voice.wav"
+import shutil
+shutil.copy(str(sample), str(out))
+print(f"Voice preset saved to {out}")
+print("Update TTS_VOICE_PRESET in .env to point at this file if needed.")
 PY
