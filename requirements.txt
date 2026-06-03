@@ -15,4 +15,4 @@ httpx==0.28.1
 pyyaml==6.0.2
 soundfile==0.12.1
 huggingface-hub>=0.30.2
-reachy-mini==1.7.1
+reachy-mini==1.8.0
