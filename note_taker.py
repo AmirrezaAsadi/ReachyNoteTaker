@@ -250,13 +250,14 @@ def finalize_note(state: SessionState, *, save: bool) -> None:
 
 # --- Main loop ------------------------------------------------------------
 
-def main(robot: bool = False):
+def main(robot: bool = False, external_stop: threading.Event = None):
     state = SessionState()
     audio_q: queue.Queue[np.ndarray] = queue.Queue(maxsize=64)
 
     if robot:
         console.print("[bold cyan]Initializing Reachy Mini...[/bold cyan]")
-        init_gestures()
+        if not get_gestures():  # don't re-init if already set by app framework
+            init_gestures()
 
     def on_audio(indata, frames, time_info, status):
         audio_q.put(indata[:, 0].copy())
@@ -266,13 +267,14 @@ def main(robot: bool = False):
     stt = STTEngine()
     console.print("[bold green]Ready. Speak when you like. Ctrl+C to stop.[/bold green]")
 
-    stop_event = threading.Event()
+    stop_event = external_stop if external_stop is not None else threading.Event()
 
     def shutdown(signum, frame):
         stop_event.set()
 
-    signal.signal(signal.SIGINT, shutdown)
-    signal.signal(signal.SIGTERM, shutdown)
+    if external_stop is None:
+        signal.signal(signal.SIGINT, shutdown)
+        signal.signal(signal.SIGTERM, shutdown)
 
     live_partial = ""
 

@@ -1,3 +1,16 @@
+---
+title: Voice Notes Reachy
+emoji: 🎙️
+colorFrom: indigo
+colorTo: purple
+sdk: static
+pinned: false
+short_description: Local voice-powered note-taking with Reachy Mini gesture feedback
+tags:
+ - reachy_mini
+ - reachy_mini_python_app
+---
+
 # voice-notes-local
 
 Fully local, voice-powered note-taking for Apple Silicon Macs. Speak freely; a local LLM cleans, structures, and saves your notes as markdown.

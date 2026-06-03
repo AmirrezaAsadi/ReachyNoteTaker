@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "voice_notes_reachy"
+version = "0.1.0"
+description = "Local voice-powered note-taking with Reachy Mini gesture feedback"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "reachy-mini",
+    "parakeet-mlx",
+    "mlx-audio",
+    "mlx-lm",
+    "silero-vad",
+    "torch",
+    "torchaudio",
+    "sounddevice",
+    "rich",
+    "numpy",
+    "python-dotenv",
+    "httpx",
+    "pyyaml",
+    "soundfile",
+    "huggingface-hub",
+]
+keywords = ["reachy-mini-app"]
+
+[project.entry-points."reachy_mini_apps"]
+voice_notes_reachy = "voice_notes_reachy.main:VoiceNotesReachy"
+
+[tool.setuptools]
+package-dir = { "" = "." }
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["."]
+
+[tool.setuptools.package-data]
+voice_notes_reachy = ["**/*"]

@@ -68,19 +68,25 @@ class ReachyGestures:
         gestures.stop()
     """
 
-    def __init__(self):
+    def __init__(self, _reachy=None):
         self._state = RobotState.IDLE
         self._target_state = RobotState.IDLE
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
         self._state_changed = threading.Event()
         self._thread: Optional[threading.Thread] = None
-        self._audio_energy = 0.0   # 0.0–1.0, updated during LISTENING
+        self._audio_energy = 0.0
         self._note_word_count = 0
 
-        self._reachy = None
-        self._connected = False
-        self._connect()
+        if _reachy is not None:
+            # Reuse an already-connected instance (e.g. passed by ReachyMiniApp)
+            self._reachy = _reachy
+            self._connected = True
+            print("[gestures] Using existing Reachy Mini connection.")
+        else:
+            self._reachy = None
+            self._connected = False
+            self._connect()
 
     def _connect(self):
         if not GESTURE_ENABLED:
