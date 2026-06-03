@@ -108,7 +108,18 @@ class STTEngine:
         self.model = from_pretrained("mlx-community/parakeet-tdt-0.6b-v3")
 
     def transcribe(self, audio: np.ndarray) -> str:
-        result = self.model.transcribe(audio)
+        import tempfile
+        import os as _os
+
+        import soundfile as sf
+
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+            tmp_path = f.name
+        try:
+            sf.write(tmp_path, audio, SAMPLE_RATE)
+            result = self.model.transcribe(tmp_path)
+        finally:
+            _os.unlink(tmp_path)
         return getattr(result, "text", str(result)).strip()
 
 
