@@ -24,11 +24,17 @@ load_dotenv()
 GESTURE_ENABLED = os.getenv("GESTURE_ENABLED", "true").lower() == "true"
 GESTURE_INTENSITY = float(os.getenv("GESTURE_INTENSITY", "0.5"))
 GESTURE_SPEED = float(os.getenv("GESTURE_SPEED", "1.0"))
+# Wing-beat (antennas) amplitude in degrees at full intensity. Kept gentle.
+WING_AMP_DEG = float(os.getenv("GESTURE_WING_AMP", "16"))
+# Antennas move in opposite directions (one up, one down) like a bird's wings.
+# Flip to "-1" if your antennas are mirror-mounted and the beat looks inverted.
+WING_SIGN = float(os.getenv("GESTURE_WING_SIGN", "1"))
 
 # Safety limits (degrees): pitch/roll ±40, yaw ±180
 _PITCH_LIMIT = 35.0
 _ROLL_LIMIT = 35.0
 _YAW_LIMIT = 60.0  # conservative for gestures
+_CONTROL_HZ = 50.0  # set_target update rate for smooth continuous motion
 
 
 class RobotState(Enum):
@@ -113,7 +119,7 @@ class ReachyGestures:
             self._thread.join(timeout=3)
         if self._connected and self._reachy:
             try:
-                self._goto(NEUTRAL, duration=1.0)
+                self._reachy.goto_target(head=NEUTRAL, antennas=[0.0, 0.0], duration=1.0, body_yaw=None)
             except Exception:  # noqa: BLE001
                 pass
 
@@ -134,110 +140,87 @@ class ReachyGestures:
         """Phase 2 hook — called per-phoneme during READING_BACK."""
         pass
 
-    # --- internal motion loop ---
+    # --- continuous motion loop (set_target @ ~50Hz) ---
 
     def _loop(self):
+        """Drive head + antennas continuously as smooth functions of time.
+
+        A single command stream (set_target) avoids head/antenna conflicts and
+        keeps the bat's wings flapping the whole time it's awake.
+        """
+        dt = 1.0 / _CONTROL_HZ
+        state_t0 = time.time()
         while not self._stop_event.is_set():
-            self._state_changed.wait(timeout=0.15)
-            self._state_changed.clear()
-            if self._stop_event.is_set():
-                break
-
+            now = time.time()
             with self._lock:
-                new_state = self._target_state
+                target = self._target_state
+            if target != self._state:
+                self._state = target
+                state_t0 = now  # reset phase so each state starts cleanly
 
-            if new_state != self._state:
-                self._goto(NEUTRAL, duration=0.4 / GESTURE_SPEED)
-                self._state = new_state
+            t = now - state_t0
+            head, antennas = self._compute(self._state, t)
+            self._send(head, antennas)
+            time.sleep(dt)
 
-            self._tick()
+    def _wings(self, t: float, beat_hz: float, amp_deg: float) -> list[float]:
+        """Antennas beat in opposite directions like a bird's wings in flight."""
+        a = np.deg2rad(amp_deg * GESTURE_INTENSITY * np.sin(2 * np.pi * beat_hz * GESTURE_SPEED * t))
+        return [WING_SIGN * a, -WING_SIGN * a]
 
-    def _tick(self):
-        """One motion cycle for the current state."""
+    def _compute(self, state: RobotState, t: float):
+        """Return (head 4x4 pose, [right_rad, left_rad]) for this instant."""
         i = GESTURE_INTENSITY
         sp = GESTURE_SPEED
+        s = lambda hz: np.sin(2 * np.pi * hz * sp * t)
 
-        if self._state == RobotState.IDLE:
-            self._sway(amplitude=3.0 * i, period=4.0 / sp)
+        if state == RobotState.IDLE:
+            head = _head_pose(yaw_deg=3.0 * i * s(0.12))
+            wings = self._wings(t, beat_hz=0.7, amp_deg=0.4 * WING_AMP_DEG)
 
-        elif self._state == RobotState.LISTENING:
-            nod_amp = 3.0 * i + 4.0 * i * self._audio_energy
-            self._nod(amplitude=nod_amp, period=1.2 / sp)
-            self._goto(_head_pose(yaw_deg=8.0 * i, pitch_deg=4.0 * i), duration=0.3)
+        elif state == RobotState.LISTENING:
+            nod = (3.0 * i + 4.0 * i * self._audio_energy) * s(1.0)
+            head = _head_pose(yaw_deg=8.0 * i, pitch_deg=4.0 * i + nod)
+            wings = self._wings(t, beat_hz=1.0, amp_deg=0.5 * WING_AMP_DEG)
 
-        elif self._state == RobotState.PROCESSING:
-            # Consistent right-side tilt every time (same side = personality)
-            self._goto(_head_pose(roll_deg=12.0 * i), duration=0.6 / sp)
-            self._micro_nod(count=3, amplitude=3.0 * i, period=0.4 / sp)
+        elif state == RobotState.PROCESSING:
+            head = _head_pose(roll_deg=12.0 * i, pitch_deg=2.0 * i * s(1.5))
+            wings = self._wings(t, beat_hz=0.6, amp_deg=0.35 * WING_AMP_DEG)
 
-        elif self._state == RobotState.WRITING:
-            bobs = max(2, self._note_word_count // 4)
-            self._writing_bobs(count=bobs, amplitude=8.0 * i, period=0.5 / sp)
+        elif state == RobotState.WRITING:
+            head = _head_pose(pitch_deg=8.0 * i * abs(s(1.0)))
+            wings = self._wings(t, beat_hz=1.2, amp_deg=0.55 * WING_AMP_DEG)
 
-        elif self._state == RobotState.CONFIRMING:
-            self._nod(amplitude=12.0 * i, period=0.8 / sp, count=1)
-            self._goto(NEUTRAL, duration=0.4)
+        elif state == RobotState.CONFIRMING:
+            head = _head_pose(pitch_deg=12.0 * i * s(1.2))
+            wings = self._wings(t, beat_hz=1.3, amp_deg=0.6 * WING_AMP_DEG)
 
-        elif self._state == RobotState.READING_BACK:
-            self._reading_scan(amplitude=6.0 * i, period=2.0 / sp)
+        elif state == RobotState.READING_BACK:
+            # Speaking: gentle scan + bob, wings gliding (calm, never frantic)
+            head = _head_pose(yaw_deg=6.0 * i * s(0.4), pitch_deg=3.0 * i * s(0.8))
+            wings = self._wings(t, beat_hz=1.4, amp_deg=0.85 * WING_AMP_DEG)
 
-        elif self._state == RobotState.SUMMARIZING:
-            # Head lifts upward — looking up, reflective
-            self._goto(_head_pose(pitch_deg=-8.0 * i), duration=0.8 / sp)
-            self._micro_nod(count=4, amplitude=4.0 * i, period=0.5 / sp)
+        elif state == RobotState.SUMMARIZING:
+            head = _head_pose(pitch_deg=-8.0 * i + 3.0 * i * s(0.6))
+            wings = self._wings(t, beat_hz=0.9, amp_deg=0.45 * WING_AMP_DEG)
 
-        elif self._state == RobotState.ERROR:
-            self._goto(_head_pose(roll_deg=10.0 * i), duration=0.4)
-            time.sleep(0.5)
-            self._shake(count=2, amplitude=6.0 * i, period=0.3 / sp)
-            self._goto(NEUTRAL, duration=0.3)
+        elif state == RobotState.ERROR:
+            head = _head_pose(roll_deg=10.0 * i, yaw_deg=6.0 * i * s(3.0))
+            wings = [0.0, 0.0]  # wings still — quizzical pause
 
-    # --- low-level motion primitives (all blocking, run in gesture thread) ---
+        else:
+            head = NEUTRAL
+            wings = [0.0, 0.0]
 
-    def _goto(self, pose: np.ndarray, duration: float):
-        duration = max(0.5, duration)  # SDK minimum
+        return head, wings
+
+    def _send(self, head: np.ndarray, antennas: list[float]):
         if not self._connected or not self._reachy:
-            time.sleep(duration)
-            return
-        if self._stop_event.is_set():
             return
         try:
-            self._reachy.goto_target(head=pose, duration=duration, body_yaw=None)
+            self._reachy.set_target(head=head, antennas=antennas)
         except Exception:  # noqa: BLE001
-            time.sleep(duration)
-
-    def _sway(self, amplitude: float, period: float):
-        self._goto(_head_pose(yaw_deg=amplitude), duration=period / 2)
-        self._goto(_head_pose(yaw_deg=-amplitude), duration=period / 2)
-        self._goto(NEUTRAL, duration=period / 4)
-
-    def _nod(self, amplitude: float, period: float, count: int = 1):
-        for _ in range(count):
-            self._goto(_head_pose(pitch_deg=amplitude), duration=period / 2)
-            self._goto(NEUTRAL, duration=period / 2)
-
-    def _micro_nod(self, count: int, amplitude: float, period: float):
-        for _ in range(count):
-            self._goto(_head_pose(pitch_deg=amplitude * 0.5), duration=period / 2)
-            self._goto(NEUTRAL, duration=period / 2)
-
-    def _writing_bobs(self, count: int, amplitude: float, period: float):
-        for _ in range(count):
-            if self._stop_event.is_set() or self._target_state != RobotState.WRITING:
-                break
-            self._goto(_head_pose(pitch_deg=amplitude), duration=period / 2)
-            self._goto(NEUTRAL, duration=period / 2)
-
-    def _reading_scan(self, amplitude: float, period: float):
-        self._goto(_head_pose(yaw_deg=amplitude), duration=period / 3)
-        self._goto(_head_pose(yaw_deg=-amplitude), duration=period / 3)
-        self._goto(NEUTRAL, duration=period / 3)
-
-    def _shake(self, count: int, amplitude: float, period: float):
-        for _ in range(count):
-            self._goto(_head_pose(yaw_deg=amplitude), duration=period / 2)
-            self._goto(_head_pose(yaw_deg=-amplitude), duration=period / 2)
-        self._goto(NEUTRAL, duration=0.3)
+            pass
 
 
 # Module-level singleton used by note_taker.py --robot
