@@ -3,9 +3,9 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "voice_notes_reachy"
+name = "barnaby_bat"
 version = "0.1.0"
-description = "Local voice-powered note-taking with Reachy Mini gesture feedback"
+description = "Barnaby the Bat — a friendly Reachy Mini conversation companion"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -28,7 +28,7 @@ dependencies = [
 keywords = ["reachy-mini-app"]
 
 [project.entry-points."reachy_mini_apps"]
-voice_notes_reachy = "voice_notes_reachy.main:VoiceNotesReachy"
+barnaby_bat = "barnaby_bat.main:BarnabyBat"
 
 [tool.setuptools]
 package-dir = { "" = "." }
@@ -38,4 +38,4 @@ include-package-data = true
 where = ["."]
 
 [tool.setuptools.package-data]
-voice_notes_reachy = ["**/*"]
+barnaby_bat = ["**/*"]

@@ -1,139 +1,56 @@
 ---
-title: Voice Notes Reachy
-emoji: 🎙️
-colorFrom: indigo
-colorTo: purple
+title: Barnaby the Bat
+emoji: 🦇
+colorFrom: purple
+colorTo: gray
 sdk: static
 pinned: false
-short_description: Local voice-powered note-taking with Reachy Mini gesture feedback
+short_description: A friendly Big Brown Bat conversation companion for Reachy Mini
 tags:
  - reachy_mini
  - reachy_mini_python_app
 ---
 
-# voice-notes-local
+# 🦇 Barnaby the Bat
 
-Fully local, voice-powered note-taking for Apple Silicon Macs. Speak freely; a local LLM cleans, structures, and saves your notes as markdown.
+A friendly, fully-local conversation companion for **Reachy Mini**. Barnaby is a gentle Big Brown Bat from Cincinnati who loves chatting, reassuring nervous humans that bats are kind neighbors, and sharing fun bat facts — all in his own cloned voice, with the robot reacting physically as he listens and speaks.
 
 ## What it does
 
-- Listens with **Silero VAD** — only transcribes when you're actually speaking
-- Transcribes with **Parakeet-TDT 0.6B v3** via `parakeet-mlx` (Apple Silicon optimized)
-- Cleans, structures, titles, and summarizes with **Gemma 4 E4B** served by `llama.cpp`
-- Optional readback with **Qwen3-TTS 1.7B** via `mlx-audio`
-- Glue: `huggingface/speech-to-speech`
-- Notes saved as timestamped markdown in `~/voice-notes/`, organized by date with tags and a full-text search index
-- Voice commands: new note, save, read back, summarize, tag, cancel
-- 100% offline after setup
+- **Listens** with Silero VAD + Parakeet-TDT STT (Apple Silicon, fully local)
+- **Roleplays** as Barnaby via a local Gemma model (`llama.cpp`), staying in character
+- **Speaks** in Barnaby's cloned voice (`barnaby.wav`) via Qwen3-TTS, with a signature bat sound effect (`StartingVoice-Ending.wav`) before and after each reply
+- **Reacts** physically — Reachy Mini leans in while listening, tilts thoughtfully while thinking, and bobs gently while speaking
+- **Saves** every conversation as a dated markdown transcript in `~/voice-notes/barnaby/`
 
-## Prerequisites
+## Run it
 
-- Apple Silicon Mac (tested on M1 Max, 64GB)
-- macOS 14+
-- [Homebrew](https://brew.sh)
-- Python 3.11+
-- [`uv`](https://github.com/astral-sh/uv) (installed automatically by `setup.sh`)
-
-## Install
+With the robot:
 
 ```bash
-git clone <this-repo> voice-notes-local
-cd voice-notes-local
-./setup.sh
+./run.sh                       # starts llama-server
+python barnaby_app.py --robot  # or: python -m barnaby_bat.main
 ```
 
-`setup.sh` installs `llama.cpp` via Homebrew, creates a `.venv` with `uv`, installs Python deps, downloads the Gemma 4 E4B GGUF, and lays out `~/voice-notes/`.
-
-## Quick start
+Without the robot (voice only):
 
 ```bash
-cp .env.example .env
 ./run.sh
+python barnaby_app.py
 ```
 
-`run.sh` starts `llama-server` in the background, waits for its health check, and launches the live note-taking UI. `Ctrl+C` cleanly shuts everything down and saves any open note.
+Talk naturally; Barnaby replies whenever you pause. `Ctrl+C` says goodbye and saves the transcript.
 
-## Voice commands
+## Assets
 
-Speak these naturally; they're matched before the segment is sent to the note LLM.
+| File | Purpose |
+| --- | --- |
+| `assets/Barnaby_Bat_Profile.md` | Character profile fed into the system prompt |
+| `assets/barnaby.wav` | Voice reference for TTS cloning |
+| `assets/StartingVoice-Ending.wav` | Sound effect played before/after each reply |
 
-| Command           | What it does                                    | Example                          |
-| ----------------- | ----------------------------------------------- | -------------------------------- |
-| `new note`        | Saves current note (if any) and starts a fresh one | "Okay, new note."             |
-| `save note`       | Saves the current note immediately              | "Save note."                     |
-| `read back`       | TTS reads the current note aloud                | "Read back."                     |
-| `summarize`       | LLM generates a session summary                 | "Summarize."                     |
-| `add tag <name>`  | Tags the current note                           | "Add tag work."                  |
-| `cancel`          | Discards the current unsaved note               | "Cancel."                        |
+## Configuration
 
-## Searching notes
+`.env` knobs (copy from `.env.example`): `TTS_ENABLED`, `LLM_MODEL_PATH`, `NOTES_DIR`, `SERVER_PORT`, plus the gesture tuning vars `GESTURE_ENABLED`, `GESTURE_INTENSITY`, `GESTURE_SPEED`.
 
-```bash
-./search.sh "meeting"          # full-text search
-./search.sh --tag work         # filter by tag
-./search.sh --date 2026-06-02  # filter by date
-./search.sh --today            # today's notes
-```
-
-## Custom TTS voice
-
-Clone your own voice from a 5–15 second `.wav`:
-
-```bash
-./clone_voice.sh my_voice.wav
-```
-
-The preset is saved to `~/.voice-notes-voice.qvp` and picked up automatically by `tts_reader.py`. Override with `TTS_VOICE_PRESET` in `.env`. Disable TTS entirely with `TTS_ENABLED=false`.
-
-## Note layout
-
-```
-~/voice-notes/
-├── 2026-06-02/
-│   ├── note-001-meeting-recap.md
-│   ├── note-002-ideas.md
-│   └── session-summary.md
-├── tags/
-│   └── index.json
-└── search-index.json
-```
-
-Each note has frontmatter:
-
-```yaml
----
-title: Meeting recap
-date: 2026-06-02T10:14:33
-tags: [work, planning]
-summary: Discussed Q3 roadmap and shipping dates.
-duration: 184
-word_count: 312
----
-```
-
-## Phase 2 — Reachy Mini integration (coming soon)
-
-The next phase turns this into a physical note-taking companion using the [Reachy Mini](https://www.pollen-robotics.com/reachy/) robot. The robot will:
-
-- Sit always-on across from you, listening passively
-- React physically to each pipeline stage — attentive lean while listening, thoughtful tilt while processing, downward bobs like a pen on paper while writing, a confident nod when a note is saved
-- Speak summaries aloud at the end of each session with synchronized head motion
-- Wake on "Hey Reachy, take a note"
-
-See [PHASE2_ROADMAP.md](PHASE2_ROADMAP.md) for the full behavior state machine, gesture tuning notes, and implementation plan.
-
-## Troubleshooting
-
-**`llama-server` won't start** — check `brew list llama.cpp`; reinstall with `brew reinstall llama.cpp`. Confirm the GGUF path in `.env` exists.
-
-**No audio captured** — System Settings → Privacy & Security → Microphone → enable for your terminal. Verify with `python -c "import sounddevice; print(sounddevice.query_devices())"`.
-
-**Parakeet/MLX errors on first run** — model weights download on first use; ensure network access on first launch, then it's fully offline.
-
-**TTS sounds robotic / wrong voice** — re-run `./clone_voice.sh` with a cleaner 10s sample (quiet room, no music).
-
-**High latency** — drop `LLM_CONTEXT_SIZE` in `.env` to 4096; close other MLX/Metal workloads.
-
-**Notes not saving** — check `~/voice-notes/` permissions and `NOTES_DIR` in `.env`.
-
-**Voice command not detected** — speak it as a complete short utterance with a pause before and after. Check `LOG_LEVEL=DEBUG` to see what the command detector saw.
+Built on the same local pipeline as [voice-notes-local](https://github.com/AmirrezaAsadi/ReachyNoteTaker); this is the conversation-companion sibling.

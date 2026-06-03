@@ -1,7 +1,10 @@
 .venv/
+.venv
 __pycache__/
 *.pyc
 .env
 .DS_Store
 *.qvp
 /tmp/
+*.egg-info/
+build/
