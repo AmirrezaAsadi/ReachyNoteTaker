@@ -37,9 +37,9 @@ LLAMA_PID=$!
 cleanup() {
   echo
   echo "==> Shutting down..."
-  # Tell the note app to save first
-  kill -INT "$NOTE_PID" 2>/dev/null || true
-  wait "$NOTE_PID" 2>/dev/null || true
+  # Tell Barnaby to save the transcript first
+  kill -INT "$APP_PID" 2>/dev/null || true
+  wait "$APP_PID" 2>/dev/null || true
   kill "$LLAMA_PID" 2>/dev/null || true
   wait "$LLAMA_PID" 2>/dev/null || true
   echo "Done."
@@ -59,7 +59,12 @@ for i in {1..60}; do
   sleep 1
 done
 
-echo "==> Launching note taker..."
-python note_taker.py &
-NOTE_PID=$!
-wait "$NOTE_PID"
+ROBOT_FLAG=""
+if [ "${1:-}" = "--robot" ] || [ "${PHASE2_REACHY_MINI:-false}" = "true" ]; then
+  ROBOT_FLAG="--robot"
+fi
+
+echo "==> Launching Barnaby the Bat ${ROBOT_FLAG}..."
+python barnaby_app.py ${ROBOT_FLAG} &
+APP_PID=$!
+wait "$APP_PID"

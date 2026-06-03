@@ -10,6 +10,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+import robot_audio
+
 load_dotenv()
 
 ASSETS = Path(__file__).parent / "assets"
@@ -20,14 +22,19 @@ TTS_ENABLED = os.getenv("TTS_ENABLED", "true").lower() == "true"
 TTS_MODEL = "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16"
 
 
-def _afplay(path: str) -> None:
-    if path and Path(path).exists():
+def _play(path: str) -> None:
+    """Play a WAV through the robot speaker (or system default), blocking."""
+    if not path or not Path(path).exists():
+        return
+    try:
+        robot_audio.play_wav(path, blocking=True)
+    except Exception:  # noqa: BLE001 — fall back to system player
         subprocess.run(["afplay", path], check=False)
 
 
 def play_bookend() -> None:
     """Play the intro/outro bat sound effect."""
-    _afplay(BOOKEND_SOUND)
+    _play(BOOKEND_SOUND)
 
 
 def speak(text: str) -> None:
@@ -52,7 +59,7 @@ def speak(text: str) -> None:
             wav = next(Path(td).glob("*.wav"), None)
             play_bookend()
             if wav:
-                _afplay(str(wav))
+                _play(str(wav))
             play_bookend()
     except Exception as e:  # noqa: BLE001
         print(f"[barnaby-tts] error: {e}")

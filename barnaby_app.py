@@ -27,6 +27,7 @@ from rich.panel import Panel
 from rich.text import Text
 
 import barnaby_tts
+import robot_audio
 from barnaby_persona import BarnabyConversation
 from note_taker import VADRecorder, STTEngine, SAMPLE_RATE, BLOCK_SAMPLES
 from reachy_gestures import RobotState, get_gestures, init_gestures
@@ -119,7 +120,21 @@ def main(robot: bool = False, external_stop: threading.Event = None):
         init_gestures()
 
     def on_audio(indata, frames, time_info, status):
-        audio_q.put(indata[:, 0].copy())
+        try:
+            audio_q.put_nowait(indata[:, 0].copy())
+        except queue.Full:
+            pass  # drop frames while busy (e.g. while Barnaby is speaking)
+
+    def drain_mic():
+        """Discard any audio captured while Barnaby was speaking (avoids the
+        robot mic picking up the robot speaker and replying to itself)."""
+        while True:
+            try:
+                audio_q.get_nowait()
+            except queue.Empty:
+                break
+        vad._buffer = []
+        vad._in_speech = False
 
     console.print("[bold]Loading VAD + STT...[/bold]")
     vad = VADRecorder()
@@ -143,12 +158,17 @@ def main(robot: bool = False, external_stop: threading.Event = None):
 
     live_partial = ""
 
+    mic_device = robot_audio.device_index()
+    if mic_device is not None:
+        console.print(f"[dim]Using robot audio device #{mic_device} ({robot_audio.AUDIO_DEVICE_NAME})[/dim]")
+
     with sd.InputStream(
         samplerate=SAMPLE_RATE,
         channels=1,
         dtype="float32",
         blocksize=BLOCK_SAMPLES,
         callback=on_audio,
+        device=mic_device,
     ):
         with Live(render(state, live_partial), refresh_per_second=8, console=console) as live:
             while not stop_event.is_set():
@@ -182,6 +202,7 @@ def main(robot: bool = False, external_stop: threading.Event = None):
                             _gesture(RobotState.READING_BACK)
                             live.update(render(state, ""))
                             barnaby_tts.speak(reply)
+                            drain_mic()  # forget Barnaby's own voice
                             state.status = "idle"
                             _gesture(RobotState.IDLE)
 
