@@ -15,5 +15,4 @@ httpx==0.28.1
 pyyaml==6.0.2
 soundfile==0.12.1
 huggingface-hub>=0.30.2
-# reachy_mini: installed via pollen-robotics app venv (see .venv/lib/python3.12/site-packages/reachy_mini.pth)
-scipy
+reachy-mini==1.7.1

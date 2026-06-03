@@ -17,7 +17,6 @@ from enum import Enum, auto
 from typing import Optional
 
 import numpy as np
-from scipy.spatial.transform import Rotation as R
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -44,17 +43,15 @@ class RobotState(Enum):
 
 
 def _head_pose(roll_deg: float = 0.0, pitch_deg: float = 0.0, yaw_deg: float = 0.0) -> np.ndarray:
-    """Build a 4x4 head pose matrix from roll/pitch/yaw in degrees.
+    """Build a 4x4 head pose matrix from roll/pitch/yaw in degrees via SDK utility."""
+    from reachy_mini.utils import create_head_pose
 
-    SDK convention: euler "xyz" = roll, pitch, yaw in world frame.
-    """
-    roll_deg = float(np.clip(roll_deg, -_ROLL_LIMIT, _ROLL_LIMIT))
-    pitch_deg = float(np.clip(pitch_deg, -_PITCH_LIMIT, _PITCH_LIMIT))
-    yaw_deg = float(np.clip(yaw_deg, -_YAW_LIMIT, _YAW_LIMIT))
-
-    pose = np.eye(4)
-    pose[:3, :3] = R.from_euler("xyz", [roll_deg, pitch_deg, yaw_deg], degrees=True).as_matrix()
-    return pose
+    return create_head_pose(
+        roll=float(np.clip(roll_deg, -_ROLL_LIMIT, _ROLL_LIMIT)),
+        pitch=float(np.clip(pitch_deg, -_PITCH_LIMIT, _PITCH_LIMIT)),
+        yaw=float(np.clip(yaw_deg, -_YAW_LIMIT, _YAW_LIMIT)),
+        degrees=True,
+    )
 
 
 NEUTRAL = _head_pose()
